@@ -35,6 +35,9 @@ slicops = "slicops.slicops_console:main"
 [project.urls]
 Homepage = "https://github.com/slaclab/slicops"
 
+[project.optional-dependencies]
+pyqt=["PyQt5"]
+
 [tool.setuptools.package-data]
 slicops = ["package_data/**"]
 
