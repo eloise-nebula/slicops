@@ -83,7 +83,7 @@ def names():
 
 
 class Base:
-    def __init__(self, name, ctx_update_q):
+    def __init__(self, name, ctx_update_q, no_asyncio=False):
         self.name = name
         self.title = self.__class__.__name__
         self.__loop = asyncio.get_event_loop()
