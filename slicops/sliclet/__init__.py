@@ -83,10 +83,9 @@ def names():
 
 
 class Base:
-    def __init__(self, name, ctx_update_q, no_asyncio=False):
+    def __init__(self, name, ctx_update_q):
         self.name = name
         self.title = self.__class__.__name__
-        self.__loop = asyncio.get_event_loop()
         self.__ctx_update_q = ctx_update_q
         # This might fail due to errors in the yaml
         self.__locked = False
@@ -188,7 +187,7 @@ class Base:
                 pass
             try:
                 # Try to end session. Might already be ended
-                self.__loop.call_soon_threadsafe(self.__ctx_update_q.put_nowait, None)
+                self.__ctx_update_q.put_nowait(None)
             except Exception:
                 pass
 
@@ -216,7 +215,7 @@ class Base:
             _destroy()
 
     def __ctx_update(self, result):
-        self.__loop.call_soon_threadsafe(self.__ctx_update_q.put_nowait, result)
+        self.__ctx_update_q.put_nowait(result)
 
     def _work_error(self, msg):
         self.__ctx_update(

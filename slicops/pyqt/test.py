@@ -1,69 +1,96 @@
-import asyncio
 import gc
-import pprint
+from pprint import pprint
 import pykern
+from pykern.pkdebug import pkdlog
 import queue
 import slicops.sliclet
+import sys
 import threading
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QHBoxLayout, QWidget, QLabel, QVBoxLayout,
+)
 
 
-# from PyQt5.QtWidgets import (
-#     QApplication, QPushButton, QMainWindow, QBoxHLayout, QBoxVLayout
-# )
-
-
-# Subclass QMainWindow to customize your application's main window
-# class MainWindow(QMainWindow):
-#     def __init__(self):
-#         super().__init__()
-
-#     def build_cell(self, ui_layout):
-#         pass
-
-#     def build_col(self, ui_layout):
-#         pass
-
-#     def build_row(self, ui_layout):
-#         pass
-
-#     def handle_start(self, ui_layout):
-#         pass
-
-# class _Worker():
-#     def __init__(self, window):
-#         self.__window = window
-#         self._queue = queue()
-
-#     def _destroy(self):
-#         pass
-
-#     def run(self):
-#         asyncio.run(self._loop())
-
-#     async def _loop(self):
-#         while (r := await self._queue.get()):
-#             pass    
+class MainWindow(QMainWindow):
+    send_update = pyqtSignal(dict)
     
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+        self._thread = QThread()
+        self._worker = _Worker(self)
+        self._worker.moveToThread(self._thread)
+        self._worker.ctx_update.connect(self.ctx_update)
+        self._thread.started.connect(self._worker.run)
+        self.send_update.connect(self.field_write)
+        self.fields = {}
+        main_widget = QWidget()
+        self.main_widget = main_widget
+        self.setCentralWidget(main_widget)
+        self._thread.start()
 
-async def main():
-    q = None
-    i = None
-    try:
-        q = asyncio.Queue()
-        i = slicops.sliclet.instance("yaml_db", q)
-        r = await q.get()
-        pprint.pprint(r["ui_layout"])
-    finally:
-        del i
-        gc.collect()
+    @pyqtSlot(dict)
+    def ctx_update(self, r):
+        pprint(r)
+        self.fields = r.fields
+        self.build_row(r.ui_layout, self.main_widget)
 
-# app = QApplication()
+    @pyqtSlot(dict)
+    def field_write(self, field_values):
+        self._worker.queue.put_nowait({"field_values": field_values})
 
-# window = MainWindow()
-# window.show()
+    def build_cell(self, r, parent):
+        field = self.fields[r.field]
+        if field.ui.widget in ["string", "float", "integer"]:
+            pprint(field.value)
+            parent.addWidget(QLabel(field.value))
+        else:
+            ValueError(f"Unsupported widget={w}")
 
-# print(window.children()[0].name)
+    def build_col(self, ui_layout, parent):
+        layout = QVBoxLayout()
+        for r in ui_layout.cols:
+            if r.layout == "rows":
+                self.build_row(r, layout)
+            elif r.layout == "cell":
+                self.build_cell(r, layout)
+            else:
+                ValueError(f"Unsupported layout={r.layout} for parent=col")
 
-# app.exec()
+    def build_row(self, ui_layout, parent):
+        layout = QHBoxLayout(parent)
+        for r in ui_layout.rows:
+            if r.layout == "cols":
+                self.build_col(r, layout)
+            elif r.layout == "cell":
+                self.build_cell(r, layout)
+            else:
+                ValueError(f"Unsupported layout={r.layout} for parent=row")
 
-asyncio.run(main())
+class _Worker(QObject):
+    destroyed = pyqtSignal()
+    ctx_update = pyqtSignal(dict)
+    
+    def __init__(self, window, **kwargs):
+        super().__init__(**kwargs)
+        self.window = window
+        self.queue = queue.Queue()
+        # Make a fake update_q.put_nowait to better integrate w qobject?
+        self.sliclet = slicops.sliclet.instance("hello", self.queue)
+
+    def run(self):
+        while (r := self.queue.get()):
+            if "ui_layout" in r:
+                self.ctx_update.emit(r)
+            if "field_values" in r:
+                self.sliclet.ctx_write(r)
+
+    def destroy(self):
+        self.destroyed.emit()
+
+app = QApplication(sys.argv)
+
+window = MainWindow()
+window.show()
+
+app.exec()

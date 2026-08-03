@@ -4,6 +4,12 @@ fields:
     ui:
       writable: false
     value: Hello World!
+  mensaje:
+    prototype: String
+    ui:
+      writable: false
+    value: Hola Mundo!
 
 ui_layout:
   - message
+  - mensaje
