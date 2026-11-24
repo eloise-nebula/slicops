@@ -1,10 +1,6 @@
-import gc
-from pprint import pprint
-import pykern
 from pykern.pkdebug import pkdlog
 import queue
 import slicops.sliclet
-import sys
 import threading
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
@@ -15,10 +11,10 @@ from PyQt5.QtWidgets import (
 class MainWindow(QMainWindow):
     send_update = pyqtSignal(dict)
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, sliclet="hello"):
         super().__init__(parent=parent)
         self._thread = QThread()
-        self._worker = _Worker(self)
+        self._worker = _Worker(self, sliclet=sliclet)
         self._worker.moveToThread(self._thread)
         self._worker.ctx_update.connect(self.ctx_update)
         self._thread.started.connect(self._worker.run)
@@ -31,7 +27,6 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(dict)
     def ctx_update(self, r):
-        pprint(r)
         self.fields = r.fields
         self.build_row(r.ui_layout, self.main_widget)
 
@@ -42,7 +37,6 @@ class MainWindow(QMainWindow):
     def build_cell(self, r, parent):
         field = self.fields[r.field]
         if field.ui.widget in ["string", "float", "integer"]:
-            pprint(field.value)
             parent.addWidget(QLabel(field.value))
         else:
             ValueError(f"Unsupported widget={w}")
@@ -71,12 +65,12 @@ class _Worker(QObject):
     destroyed = pyqtSignal()
     ctx_update = pyqtSignal(dict)
     
-    def __init__(self, window, **kwargs):
+    def __init__(self, window, sliclet="hello", **kwargs):
         super().__init__(**kwargs)
         self.window = window
         self.queue = queue.Queue()
         # Make a fake update_q.put_nowait to better integrate w qobject?
-        self.sliclet = slicops.sliclet.instance("hello", self.queue)
+        self.sliclet = slicops.sliclet.instance(sliclet, self.queue)
 
     def run(self):
         while (r := self.queue.get()):
@@ -88,9 +82,3 @@ class _Worker(QObject):
     def destroy(self):
         self.destroyed.emit()
 
-app = QApplication(sys.argv)
-
-window = MainWindow()
-window.show()
-
-app.exec()
